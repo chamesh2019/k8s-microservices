@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-payment-service
+  labels: 
+    release: {{ .Release.Name }}
+    service: payment-service
+spec:
+  replicas: {{ .Values.paymentService.replicaCount }}
+  selector:
+    matchLabels:
+      release: {{ .Release.Name }}
+      service: payment-service
+  template:
+    metadata:
+      labels: 
+        release: {{ .Release.Name }}
+        service: payment-service
+    spec:
+      containers:
+        - name: payment-service
+          image: "{{ .Values.paymentService.image.repository }}:{{ .Values.paymentService.image.tag }}"
+          imagePullPolicy: {{ .Values.paymentService.image.pullPolicy }}
+          env:
+            - name: RABBITMQ_HOST
+              value: {{ .Release.Name }}-rabbitmq-service
+            - name: RABBITMQ_PORT
+              value: "5672"
+            - name: RABBITMQ_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-rabbitmq
+                  key: RABBITMQ_DEFAULT_USER
+            - name: RABBITMQ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-rabbitmq
+                  key: RABBITMQ_DEFAULT_PASS
+            - name: REDIS_HOST
+              value: {{ .Release.Name }}-redis-service
+
+          ports:
+            - containerPort: {{ .Values.paymentService.service.port }}
+          resources:
+            limits:
+              cpu: {{ .Values.paymentService.resources.limits.cpu }}
+              memory: {{ .Values.paymentService.resources.limits.memory }}
+            requests:
+              cpu: {{ .Values.paymentService.resources.requests.cpu }}
+              memory: {{ .Values.paymentService.resources.requests.memory }}

@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: 
+  name: {{ .Release.Name }}-rabbitmq
+  labels:
+    release: {{ .Release.Name }}
+    service: rabbitmq
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      release: {{ .Release.Name }}
+      service: rabbitmq
+  template:
+    metadata:
+      name: {{ .Release.Name }}-rabbitmq
+      labels:
+        release: {{ .Release.Name }}
+        service: rabbitmq
+    spec:
+      containers:
+        - name: rabbitmq
+          image: "{{ .Values.rabbitmq.image.registry }}/{{ .Values.rabbitmq.image.repository }}:{{ .Values.rabbitmq.image.tag }}"
+          envFrom:
+            - secretRef: 
+                name: {{ .Release.Name }}-rabbitmq
+          ports:
+            - name: amqp
+              containerPort: 5672
+            - name: stats
+              containerPort: 15672
+          resources:
+            requests:
+              cpu: {{ .Values.rabbitmq.resources.requests.cpu }}
+              memory: {{ .Values.rabbitmq.resources.requests.memory }}
+            limits:
+              cpu: {{ .Values.rabbitmq.resources.limits.cpu }}
+              memory: {{ .Values.rabbitmq.resources.limits.memory }}

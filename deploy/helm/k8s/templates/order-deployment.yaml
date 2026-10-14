@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-order-service
+  labels:
+    release: {{ .Release.Name }}
+    service: order-service
+spec:
+  replicas: {{ .Values.orderService.replicaCount }}
+  selector:
+    matchLabels:
+      release: {{ .Release.Name }}
+      service: order-service
+  template:
+    metadata:
+      labels:
+        release: {{ .Release.Name }}
+        service: order-service
+    spec:
+      containers:
+        - name: order-service
+          image: "{{ .Values.orderService.image.repository }}:{{ .Values.orderService.image.tag }}"
+          imagePullPolicy: {{ .Values.orderService.image.pullPolicy }}
+          env:
+            - name: RABBITMQ_HOST
+              value: {{ .Release.Name }}-rabbitmq-service
+            - name: RABBITMQ_PORT
+              value: "5672"
+            - name: RABBITMQ_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-rabbitmq
+                  key: RABBITMQ_DEFAULT_USER
+            - name: RABBITMQ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-rabbitmq
+                  key: RABBITMQ_DEFAULT_PASS
+            - name: REDIS_HOST
+              value: {{ .Release.Name }}-redis-service
+          ports:
+            - containerPort: {{ .Values.orderService.service.port }}
+          resources:
+            limits:
+              cpu: {{ .Values.orderService.resources.limits.cpu }}
+              memory: {{ .Values.orderService.resources.limits.memory }}
+            requests:
+              cpu: {{ .Values.orderService.resources.requests.cpu }}
+              memory: {{ .Values.orderService.resources.requests.memory }}

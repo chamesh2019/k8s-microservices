@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CloudMart · Cloud-Native Storefront</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Navbar -->
+    <header class="navbar">
+      <div class="nav-brand">
+        <span class="brand-badge">K8S MICROSERVICES</span>
+        <h1>CloudMart<span>.io</span></h1>
+      </div>
+      <div class="cluster-status">
+        <span class="status-indicator online"></span>
+        <span class="status-text">Cluster Ingress: <strong>Port 8080</strong></span>
+      </div>
+    </header>
+
+    <!-- Hero / Architecture Banner -->
+    <section class="hero-banner">
+      <div class="hero-content">
+        <p class="hero-eyebrow">EVENT-DRIVEN CHOREOGRAPHY</p>
+        <h2>Microservice E-Commerce Demo</h2>
+        <p class="hero-desc">Orders are ingested via <code>order-service</code>, decoupled through <strong>RabbitMQ</strong>, processed asynchronously by <code>payment-service</code>, and cached in <strong>Redis</strong>.</p>
+      </div>
+      <div class="hero-stats">
+        <div class="stat-card">
+          <span class="stat-label">Architecture</span>
+          <span class="stat-val">Event-Driven AMQP</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Message Bus</span>
+          <span class="stat-val coral">RabbitMQ :5672</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Ingress Route</span>
+          <span class="stat-val blue">Traefik Ingress</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Main Content Layout -->
+    <main class="store-layout">
+      <!-- Product Catalog -->
+      <section class="products-section">
+        <div class="section-header">
+          <h3>Cloud Hardware & Gear</h3>
+          <span class="tag">SELECT ITEMS TO CHECKOUT</span>
+        </div>
+        <div class="products-grid" id="products-grid">
+          <!-- Dynamically injected items -->
+        </div>
+      </section>
+
+      <!-- Cart & Live Transaction Feed -->
+      <aside class="sidebar">
+        <!-- Cart Card -->
+        <div class="card cart-card">
+          <div class="card-header">
+            <h4>Shopping Cart</h4>
+            <span class="cart-count" id="cart-count">0 items</span>
+          </div>
+          <div class="cart-items" id="cart-items">
+            <p class="empty-cart">Your cart is empty. Click an item to add it!</p>
+          </div>
+          <div class="cart-footer">
+            <div class="cart-total-row">
+              <span>Total:</span>
+              <span class="total-amount" id="total-amount">$0.00</span>
+            </div>
+            <button class="btn btn-primary" id="checkout-btn" disabled onclick="checkout()">Place Order (Async Ingress)</button>
+          </div>
+        </div>
+
+        <!-- Live Transaction Tracker -->
+        <div class="card tracking-card">
+          <div class="card-header">
+            <h4>Live Transaction Monitor</h4>
+            <span class="pulse-dot"></span>
+          </div>
+          <div id="tracker-feed" class="tracker-feed">
+            <p class="empty-feed">No active transactions. Place an order above to watch the asynchronous pipeline in real time!</p>
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <span>CloudMart Kubernetes Microservices Platform</span>
+      <span>k3d Multi-Node Cluster · RabbitMQ · Redis · Express</span>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

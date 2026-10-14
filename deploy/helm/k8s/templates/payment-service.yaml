@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service 
+metadata:
+  name: {{ .Release.Name }}-payment-service
+  labels:
+    release: {{ .Release.Name }}
+    service: payment-service
+spec:
+  type: {{ .Values.paymentService.service.type }}
+  selector:
+    release: {{ .Release.Name }}
+    service: payment-service
+  ports:
+    - name: http
+      port: {{ .Values.paymentService.service.port }}
+      targetPort: {{ .Values.paymentService.service.port }}
