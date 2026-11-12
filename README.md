@@ -6,33 +6,7 @@ A **learning-focused** cloud-native e-commerce platform demonstrating event-driv
 
 ## 🏗️ Architecture Overview
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           k3d Multi-Node Cluster                            │
-│  ┌──────────────┐    ┌──────────────────┐    ┌──────────────────────────┐   │
-│  │   Frontend   │───▶│   order-service  │───▶│       RabbitMQ           │   │
-│  │   (nginx)    │    │   (Express.js)   │    │   (cloudmart.events)     │   │
-│  │   Port 80    │    │   Port 8080      │    │   Exchange: topic        │   │
-│  └──────────────┘    └────────┬─────────┘    └───────────┬──────────────┘   │
-│                               │                            │                 │
-│                    ┌──────────▼──────────┐                │                 │
-│                    │      Redis Cache    │◀───────────────┘                 │
-│                    │   (order:store)     │    ┌─────────────────────────┐  │
-│                    └─────────────────────┘    │   payment-service       │  │
-│                                               │   (Express.js Consumer) │  │
-│                                               │   Port 8081             │  │
-│                                               └───────────┬─────────────┘  │
-│                                                           │               │
-│                                               ┌───────────▼─────────────┐  │
-│                                               │   Redis (payment:audit) │  │
-│                                               └─────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                    │
-                          ┌─────────▼─────────┐
-                          │   Traefik Ingress │
-                          │   Port 8080       │
-                          └───────────────────┘
-```
+![CloudMart Architecture](cloudmart-architecture.png)
 
 ### Event Flow (Choreography Pattern)
 
