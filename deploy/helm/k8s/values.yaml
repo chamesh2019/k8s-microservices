@@ -19,8 +19,8 @@ ingress:
 frontend:
   replicaCount: 1
   image:
-    repository: cloudmart/frontend
-    tag: v1.0
+    repository: ghcr.io/chamesh2019/k8s-microservices/frontend
+    tag: v1.0.0
     pullPolicy: IfNotPresent
   service:
     type: ClusterIP
@@ -36,8 +36,8 @@ frontend:
 orderService:
   replicaCount: 1
   image:
-    repository: cloudmart/order-service
-    tag: v1.1
+    repository: ghcr.io/chamesh2019/k8s-microservices/order-service
+    tag: v1.0.0
     pullPolicy: IfNotPresent
   service:
     type: ClusterIP
@@ -53,8 +53,8 @@ orderService:
 paymentService:
   replicaCount: 1
   image:
-    repository: cloudmart/payment-service
-    tag: v1.1
+    repository: ghcr.io/chamesh2019/k8s-microservices/payment-service
+    tag: v1.0.0
     pullPolicy: IfNotPresent
   service:
     type: ClusterIP

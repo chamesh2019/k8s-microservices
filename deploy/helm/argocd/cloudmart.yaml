@@ -1,0 +1,21 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cloudmart
+  namespace: argocd
+
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/chamesh2019/k8s-microservices.git
+    targetRevision: main
+    path: deploy/helm/k8s
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cloudmart
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
