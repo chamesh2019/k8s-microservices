@@ -1,0 +1,105 @@
+name: Update Deployment Versions
+
+on:
+  workflow_dispatch:
+    inputs:
+      payment-service-version:
+        description: "Payment Service Version (keep empty to use the current version)"
+        required: false
+        type: string
+      order-service-version:
+        description: "Order Service Version (keep empty to use the current version)"
+        required: false
+        type: string
+      frontend-version:
+        description: "Frontend Version (keep empty to use the current version)"
+        required: false
+        type: string
+      rabbitmq-version:
+        description: "RabbitMQ Version (keep empty to use the current version)"
+        required: false
+        type: string
+      redis-version:
+        description: "Redis Version (keep empty to use the current version)"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  verify-versions:
+    runs-on: ubuntu-latest
+    env:
+      MANIFESTS_DIR: deploy/helm/k8s
+      REGISTRY_OWNER: ghcr.io/chamesh2019
+      PAYMENT_SERVICE_VERSION: ${{ github.event.inputs.payment-service-version }}
+      ORDER_SERVICE_VERSION: ${{ github.event.inputs.order-service-version }}
+      FRONTEND_VERSION: ${{ github.event.inputs.frontend-version }}
+      RABBITMQ_VERSION: ${{ github.event.inputs.rabbitmq-version }}
+      REDIS_VERSION: ${{ github.event.inputs.redis-version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up GHCR authentication
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify versions
+        run: |
+          check_local_image() {
+            local image="$1"
+            local tag="$2"
+            if [ -n "$tag" ]; then
+              echo "Checking ${REGISTRY_OWNER}/${image}:${tag}..."
+              if ! docker manifest inspect "${REGISTRY_OWNER}/${image}:${tag}" > /dev/null 2>&1; then
+                echo "::error::Image tag ${REGISTRY_OWNER}/${image}:${tag} not found in GHCR."
+                exit 1
+              fi
+              echo "Verified: ${REGISTRY_OWNER}/${image}:${tag}"
+            fi
+          }
+
+          check_local_image "payment-service" "${{ env.PAYMENT_SERVICE_VERSION }}"
+          check_local_image "order-service" "${{ env.ORDER_SERVICE_VERSION }}"
+          check_local_image "frontend" "${{ env.FRONTEND_VERSION }}"
+
+          if [ -n "${{ env.RABBITMQ_VERSION }}" ]; then
+            VALUES_FILE="${MANIFESTS_DIR}/values/rabbitmq.yaml"
+            RABBITMQ_REGISTRY="$(yq -r '.rabbitmq.image.registry // ""' "${VALUES_FILE}")"
+            RABBITMQ_REPOSITORY="$(yq -r '.rabbitmq.image.repository' "${VALUES_FILE}")"
+            RABBITMQ_IMAGE="${RABBITMQ_REPOSITORY}"
+            if [ -n "${RABBITMQ_REGISTRY}" ]; then
+              RABBITMQ_IMAGE="${RABBITMQ_REGISTRY}/${RABBITMQ_IMAGE}"
+            fi
+
+            echo "Checking rabbitmq image..."
+            if ! docker manifest inspect "${RABBITMQ_IMAGE}:${{ env.RABBITMQ_VERSION }}" > /dev/null 2>&1; then
+              echo "::error::Image tag ${RABBITMQ_IMAGE}:${{ env.RABBITMQ_VERSION }} not found."
+              exit 1
+            fi
+            echo "Verified: ${RABBITMQ_IMAGE}:${{ env.RABBITMQ_VERSION }}"
+          fi
+
+          if [ -n "${{ env.REDIS_VERSION }}" ]; then
+            VALUES_FILE="${MANIFESTS_DIR}/values/redis.yaml"
+            REDIS_REGISTRY="$(yq -r '.redis.image.registry // ""' "${VALUES_FILE}")"
+            REDIS_REPOSITORY="$(yq -r '.redis.image.repository' "${VALUES_FILE}")"
+            REDIS_IMAGE="${REDIS_REPOSITORY}"
+
+            if [ -n "${REDIS_REGISTRY}" ]; then
+              REDIS_IMAGE="${REDIS_REGISTRY}/${REDIS_IMAGE}"
+            fi
+
+            echo "Checking redis image..."
+            if ! docker manifest inspect "${REDIS_IMAGE}:${{ env.REDIS_VERSION }}" > /dev/null 2>&1; then
+              echo "::error::Image tag ${REDIS_IMAGE}:${{ env.REDIS_VERSION }} not found."
+              exit 1
+            fi
+
+            echo "Verified: ${REDIS_IMAGE}:${{ env.REDIS_VERSION }}"
+          fi
