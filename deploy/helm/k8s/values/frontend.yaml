@@ -1,0 +1,16 @@
+frontend:
+  replicaCount: 1
+  image:
+    repository: ghcr.io/chamesh2019/k8s-microservices/frontend
+    tag: v1.0.0
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 80
+  resources:
+    limits:
+      cpu: 500m
+      memory: 256Mi
+    requests:
+      cpu: 250m
+      memory: 128Mi

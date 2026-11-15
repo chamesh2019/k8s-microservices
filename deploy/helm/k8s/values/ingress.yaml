@@ -1,0 +1,17 @@
+ingress:
+  enabled: true
+  className: traefik
+  paths:
+    - path: /api
+      pathType: Prefix
+      service:
+        name: cloudmart-order-service
+        port:
+          number: 8080
+
+    - path: /
+      pathType: Prefix
+      service:
+        name: cloudmart-frontend-service
+        port:
+          number: 80

@@ -1,0 +1,22 @@
+redis:
+  image:
+    registry: docker.io
+    repository: redis
+    tag: 7.0.11
+  enabled: true
+
+  persistence:
+    enabled: false
+
+  service:
+    type: ClusterIP
+    ports:
+      - name: redis
+        port: 6379
+  resources:
+    limits:
+      cpu: 500m
+      memory: 256Mi
+    requests:
+      cpu: 250m
+      memory: 128Mi

@@ -10,6 +10,15 @@ spec:
     repoURL: https://github.com/chamesh2019/k8s-microservices.git
     targetRevision: main
     path: deploy/helm/k8s
+    helm:
+      valueFiles:
+        - values/rabbitmq.yaml
+        - values/redis.yaml
+        - values/payment-service.yaml
+        - values/ingress.yaml
+        - values/frontend.yaml
+        - values/order-service.yaml
+
   destination:
     server: https://kubernetes.default.svc
     namespace: cloudmart
