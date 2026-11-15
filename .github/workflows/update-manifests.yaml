@@ -103,3 +103,30 @@ jobs:
 
             echo "Verified: ${REDIS_IMAGE}:${{ env.REDIS_VERSION }}"
           fi
+
+      - name: Update versions in manifests
+        run: |
+          update_version_in_file() {
+            local file="$1"
+            local image_path="$2"
+            local new_version="$3"
+
+            if [ -n "$new_version" ]; then
+              echo "Updating ${file} for ${image_path} to version ${new_version}..."
+              yq -i "${image_path} = \"${new_version}\"" "${file}"
+            fi
+          }
+
+          update_version_in_file "${MANIFESTS_DIR}/values/payment-service.yaml" ".paymentService.image.tag" "${{ env.PAYMENT_SERVICE_VERSION }}"
+          update_version_in_file "${MANIFESTS_DIR}/values/order-service.yaml" ".orderService.image.tag" "${{ env.ORDER_SERVICE_VERSION }}"
+          update_version_in_file "${MANIFESTS_DIR}/values/frontend.yaml" ".frontend.image.tag" "${{ env.FRONTEND_VERSION }}"
+          update_version_in_file "${MANIFESTS_DIR}/values/rabbitmq.yaml" ".rabbitmq.image.tag" "${{ env.RABBITMQ_VERSION }}"
+          update_version_in_file "${MANIFESTS_DIR}/values/redis.yaml" ".redis.image.tag" "${{ env.REDIS_VERSION }}"
+
+      - name: Commit and push changes
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add "${MANIFESTS_DIR}/values/payment-service.yaml" "${MANIFESTS_DIR}/values/order-service.yaml" "${MANIFESTS_DIR}/values/frontend.yaml" "${MANIFESTS_DIR}/values/rabbitmq.yaml" "${MANIFESTS_DIR}/values/redis.yaml"
+          git commit -m "Update service versions via GitHub Actions"
+          git push origin HEAD:main
