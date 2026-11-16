@@ -12,7 +12,7 @@ spec:
       helm:
         releaseName: prometheus
         valueFiles:
-          - $values/deploy/helm/prometheus-stack/observability.yaml
+          - $values/deploy/helm/prometheus-stack/monitoring-values.yaml
 
     - repoURL: https://github.com/chamesh2019/k8s-microservices.git
       targetRevision: main
@@ -27,3 +27,4 @@ spec:
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
+      - ServerSideApply=true

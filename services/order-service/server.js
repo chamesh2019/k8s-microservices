@@ -2,6 +2,7 @@ const express = require('express');
 const amqp = require('amqplib');
 const Redis = require('ioredis');
 const crypto = require('crypto');
+const promClient = require('prom-client')
 
 const app = express();
 app.use(express.json());
