@@ -1,0 +1,24 @@
+trafficGenerator:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: ghcr.io/chamesh2019/k8s-microservices/traffic-generator
+    tag: v1.0.0
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8082
+  requestsPerSecond: "1"
+  frontendUrl: "http://{{ .Release.Name }}-frontend:80"
+  orderServiceUrl: "http://{{ .Release.Name }}-order-service:{{ .Values.orderService.service.port }}"
+  ratios:
+    pageLoad: "0.3"
+    checkout: "0.1"
+    poll: "0.6"
+  resources:
+    limits:
+      cpu: 500m
+      memory: 256Mi
+    requests:
+      cpu: 250m
+      memory: 128Mi

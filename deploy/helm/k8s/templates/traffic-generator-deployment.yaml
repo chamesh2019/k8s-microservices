@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-traffic-generator
+  labels:
+    release: {{ .Release.Name }}
+    service: traffic-generator
+spec:
+  replicas: {{ .Values.trafficGenerator.replicaCount }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      release: {{ .Release.Name }}
+      service: traffic-generator
+  template:
+    metadata:
+      labels:
+        release: {{ .Release.Name }}
+        service: traffic-generator
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .Values.trafficGenerator.service.port }}"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: traffic-generator
+          image: "{{ .Values.trafficGenerator.image.repository }}:{{ .Values.trafficGenerator.image.tag }}"
+          imagePullPolicy: {{ .Values.trafficGenerator.image.pullPolicy }}
+          env:
+            - name: FRONTEND_URL
+              value: "{{ .Values.trafficGenerator.frontendUrl }}"
+            - name: ORDER_SERVICE_URL
+              value: "{{ .Values.trafficGenerator.orderServiceUrl }}"
+            - name: REQUESTS_PER_SECOND
+              value: "{{ .Values.trafficGenerator.requestsPerSecond }}"
+            - name: FRONTEND_PAGE_LOAD_RATIO
+              value: "{{ .Values.trafficGenerator.ratios.pageLoad }}"
+            - name: CHECKOUT_RATIO
+              value: "{{ .Values.trafficGenerator.ratios.checkout }}"
+            - name: POLL_RATIO
+              value: "{{ .Values.trafficGenerator.ratios.poll }}"
+            - name: ENABLED
+              value: "{{ .Values.trafficGenerator.enabled }}"
+          ports:
+            - containerPort: {{ .Values.trafficGenerator.service.port }}
+          resources:
+            limits:
+              cpu: {{ .Values.trafficGenerator.resources.limits.cpu }}
+              memory: {{ .Values.trafficGenerator.resources.limits.memory }}
+            requests:
+              cpu: {{ .Values.trafficGenerator.resources.requests.cpu }}
+              memory: {{ .Values.trafficGenerator.resources.requests.memory }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: {{ .Values.trafficGenerator.service.port }}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: {{ .Values.trafficGenerator.service.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 5
