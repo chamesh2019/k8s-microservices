@@ -25,6 +25,8 @@ jobs:
             context: services/order-service
           - image: payment-service
             context: services/payment-service
+          - image: traffic-generator
+            context: services/traffic-generator
 
     steps:
       - name: Checkout repository
