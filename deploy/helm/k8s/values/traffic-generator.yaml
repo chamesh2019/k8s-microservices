@@ -3,7 +3,7 @@ trafficGenerator:
   replicaCount: 1
   image:
     repository: ghcr.io/chamesh2019/k8s-microservices/traffic-generator
-    tag: v1.0.0
+    tag: 1875fe9cef08c9da30fa05a6c663a3585e8d28b4
     pullPolicy: IfNotPresent
   service:
     type: ClusterIP
