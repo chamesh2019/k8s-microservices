@@ -18,6 +18,7 @@ spec:
         - values/ingress.yaml
         - values/frontend.yaml
         - values/order-service.yaml
+        - values/traffic-generator.yaml
 
   destination:
     server: https://kubernetes.default.svc
