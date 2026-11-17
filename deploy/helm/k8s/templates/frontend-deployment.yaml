@@ -7,6 +7,11 @@ metadata:
     service: frontend
 spec:
   replicas: {{ .Values.frontend.replicaCount }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 2
   selector: 
     matchLabels:
       release: {{ .Release.Name }}
@@ -30,3 +35,4 @@ spec:
             requests:
               cpu: {{ .Values.frontend.resources.requests.cpu }}
               memory: {{ .Values.frontend.resources.requests.memory}}
+      
