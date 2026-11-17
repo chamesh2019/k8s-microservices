@@ -21,14 +21,14 @@ promClient.collectDefaultMetrics({ register });
 const httpRequestsTotal = new promClient.Counter({
   name: 'traffic_generator_http_requests_total',
   help: 'Total HTTP requests sent',
-  labelNames: ['method', 'path', 'status', 'target'],
+  labelNames: ['method', 'path', 'status', 'target', 'scenario'],
   registers: [register],
 });
 
 const httpRequestDuration = new promClient.Histogram({
   name: 'traffic_generator_http_request_duration_seconds',
   help: 'HTTP request duration in seconds',
-  labelNames: ['method', 'path', 'target'],
+  labelNames: ['method', 'path', 'target', 'scenario'],
   buckets: [0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10],
   registers: [register],
 });
@@ -62,11 +62,11 @@ function generateRandomOrder() {
     { id: 'prod-3', sku: 'CAP-AMQP', name: 'RabbitMQ Message Cap', price: 28.00 },
     { id: 'prod-4', sku: 'FIDO2-KEY', name: 'Cluster Key Security Token', price: 45.00 },
   ];
-  
+
   const itemCount = Math.floor(Math.random() * 3) + 1;
   const items = [];
   let amount = 0;
-  
+
   for (let i = 0; i < itemCount; i++) {
     const product = products[Math.floor(Math.random() * products.length)];
     const qty = Math.floor(Math.random() * 2) + 1;
@@ -84,21 +84,21 @@ function generateRandomOrder() {
 async function makeRequest(target, method, path, body = null, labels = {}) {
   const url = target === 'frontend' ? FRONTEND_URL : ORDER_SERVICE_URL;
   const startTime = Date.now();
-  
+
   try {
     const options = {
       method,
       headers: { 'Content-Type': 'application/json' },
     };
     if (body) options.body = JSON.stringify(body);
-    
+
     const response = await fetch(`${url}${path}`, options);
     const duration = (Date.now() - startTime) / 1000;
     const status = response.status.toString();
-    
+
     httpRequestsTotal.inc({ method, path, status, target, ...labels });
     httpRequestDuration.observe({ method, path, target, ...labels }, duration);
-    
+
     return { ok: response.ok, status, data: response.ok ? await response.json() : await response.text(), duration };
   } catch (err) {
     const duration = (Date.now() - startTime) / 1000;
@@ -120,7 +120,7 @@ async function simulatePageLoad() {
 async function simulateCheckout() {
   const order = generateRandomOrder();
   const result = await makeRequest('order-service', 'POST', '/api/orders', order, { scenario: 'checkout' });
-  
+
   if (result.ok) {
     ordersCreated.inc();
     const orderId = result.data.orderId;
@@ -141,17 +141,17 @@ async function simulateCheckout() {
 
 async function simulatePolling() {
   if (activeOrders.size === 0) return;
-  
+
   const orderIds = Array.from(activeOrders.keys());
   const orderId = orderIds[Math.floor(Math.random() * orderIds.length)];
   const session = activeOrders.get(orderId);
-  
+
   const result = await makeRequest('order-service', 'GET', `/api/orders/${orderId}`, null, { scenario: 'poll' });
-  
+
   if (result.ok) {
     session.pollsRemaining--;
     console.log(`[TrafficGen] Poll ${orderId}: ${result.data.status} (polls left: ${session.pollsRemaining}) (${result.duration.toFixed(3)}s)`);
-    
+
     if (result.data.status === 'CONFIRMED' || result.data.status === 'FAILED' || session.pollsRemaining <= 0) {
       activeOrders.delete(orderId);
       userSessions.set(activeOrders.size);
@@ -174,7 +174,7 @@ function pickAction() {
 
 function runTrafficTick() {
   const action = pickAction();
-  
+
   switch (action) {
     case 'page_load':
       simulatePageLoad();
@@ -190,12 +190,12 @@ function runTrafficTick() {
 
 function startTrafficGeneration() {
   if (intervalId) return;
-  
+
   const intervalMs = 1000 / REQUESTS_PER_SECOND;
   console.log(`[TrafficGen] Starting traffic generation at ${REQUESTS_PER_SECOND} req/s (${intervalMs}ms interval)`);
   console.log(`[TrafficGen] Ratios - Page Load: ${FRONTEND_PAGE_LOAD_RATIO}, Checkout: ${CHECKOUT_RATIO}, Poll: ${POLL_RATIO}`);
   console.log(`[TrafficGen] Frontend: ${FRONTEND_URL}, Order Service: ${ORDER_SERVICE_URL}`);
-  
+
   intervalId = setInterval(runTrafficTick, intervalMs);
   runTrafficTick();
 }
@@ -211,8 +211,8 @@ function stopTrafficGeneration() {
 }
 
 app.get('/healthz', (req, res) => {
-  res.status(200).json({ 
-    status: 'ok', 
+  res.status(200).json({
+    status: 'ok',
     enabled: ENABLED,
     requestsPerSecond: REQUESTS_PER_SECOND,
     frontendUrl: FRONTEND_URL,
@@ -245,41 +245,41 @@ app.post('/control/rate', (req, res) => {
   if (typeof requestsPerSecond !== 'number' || requestsPerSecond <= 0) {
     return res.status(400).json({ error: 'requestsPerSecond must be a positive number' });
   }
-  
+
   const wasRunning = !!intervalId;
   stopTrafficGeneration();
-  
+
   process.env.REQUESTS_PER_SECOND = requestsPerSecond.toString();
   const newIntervalMs = 1000 / requestsPerSecond;
-  
+
   if (wasRunning) {
     startTrafficGeneration();
   }
-  
+
   res.json({ status: 'updated', requestsPerSecond, intervalMs: newIntervalMs });
 });
 
 app.post('/control/ratios', (req, res) => {
   const { pageLoad, checkout, poll } = req.body;
   const ratios = { pageLoad, checkout, poll };
-  
+
   for (const [key, value] of Object.entries(ratios)) {
     if (value !== undefined && (typeof value !== 'number' || value < 0 || value > 1)) {
       return res.status(400).json({ error: `${key} must be a number between 0 and 1` });
     }
   }
-  
+
   const sum = (pageLoad || FRONTEND_PAGE_LOAD_RATIO) + (checkout || CHECKOUT_RATIO) + (poll || POLL_RATIO);
   if (Math.abs(sum - 1) > 0.001) {
     return res.status(400).json({ error: 'Ratios must sum to 1' });
   }
-  
+
   process.env.FRONTEND_PAGE_LOAD_RATIO = (pageLoad || FRONTEND_PAGE_LOAD_RATIO).toString();
   process.env.CHECKOUT_RATIO = (checkout || CHECKOUT_RATIO).toString();
   process.env.POLL_RATIO = (poll || POLL_RATIO).toString();
-  
-  res.json({ 
-    status: 'updated', 
+
+  res.json({
+    status: 'updated',
     ratios: {
       pageLoad: parseFloat(process.env.FRONTEND_PAGE_LOAD_RATIO),
       checkout: parseFloat(process.env.CHECKOUT_RATIO),
