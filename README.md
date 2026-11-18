@@ -1,12 +1,12 @@
 # CloudMart Kubernetes Microservices Platform
 
-A **learning-focused** cloud-native e-commerce platform demonstrating event-driven microservices architecture deployed on **k3d** (k3s in Docker). Built to explore Kubernetes, Helm, RabbitMQ, Redis, and microservice communication patterns.
+A cloud-native e-commerce platform demonstrating event-driven microservices architecture deployed on **Kubernetes (k3d)** with **ArgoCD GitOps**, **Sealed Secrets**, **GitHub Actions CI/CD**, and an observability pipeline powered by **kube-prometheus-stack**. Built to explore Kubernetes patterns, Helm, RabbitMQ, Redis, automated deployment pipelines, and microservice choreography.
 
 ---
 
 ## 🏗️ Architecture Overview
 
-![CloudMart Architecture](cloudmart-architecture.png)
+![CloudMart Architecture](cloudmart_architecture.png)
 
 ### Event Flow (Choreography Pattern)
 
@@ -18,7 +18,7 @@ A **learning-focused** cloud-native e-commerce platform demonstrating event-driv
 
 ---
 
-## 📦 Services
+## 📦 Services & Components
 
 ### 1. **frontend** (nginx)
 - **Technology**: Nginx serving static HTML/CSS/JS
@@ -43,7 +43,7 @@ A **learning-focused** cloud-native e-commerce platform demonstrating event-driv
 
 ### 3. **payment-service** (Node.js/Express)
 - **Technology**: Express.js, amqplib, ioredis
-- **Port**: 8081 (health only, no public API)
+- **Port**: 8081 (health only, internal service)
 - **Endpoints**:
   - `GET /healthz` — Kubernetes probe
 - **Behavior**:
@@ -51,80 +51,166 @@ A **learning-focused** cloud-native e-commerce platform demonstrating event-driv
   - Simulates payment gateway (100ms latency)
   - Stores payment audit in Redis (`payment:{id}`)
   - Publishes `payment.processed` event
-  - **Dead Letter Queue** configured for failed messages
+  - **Dead Letter Queue (DLQ)** configured for poison message handling
 
-### 4. **Infrastructure**
+### 4. **traffic-generator** (Node.js/Express)
+- **Technology**: Express.js, prom-client
+- **Port**: 8082
+- **Endpoints**:
+  - `GET /metrics` — Prometheus metrics endpoint
+  - `GET /healthz` — Health check probe
+  - `POST /config` — Dynamically tune request rates (`requestsPerSecond`, ratios)
+- **Behavior**:
+  - Replays realistic user journeys (`browse` → `checkout` → `poll`) against the frontend and order service
+  - Emits custom Prometheus metrics (`traffic_generator_http_requests_total`, `traffic_generator_http_request_duration_seconds`, `traffic_generator_active_sessions`, etc.) with scenario and target labels to exercise the observability stack
 
-| Component | Version | Purpose |
-|-----------|---------|---------|
-| **RabbitMQ** | 4.3.6 | Message broker (topic exchange, DLX) |
+### 5. **Infrastructure & Platform**
+
+| Component | Version / Type | Purpose |
+|-----------|----------------|---------|
+| **RabbitMQ** | 4.3.6 | Message broker (topic exchange, dead-letter exchange) |
 | **Redis** | 7.0.11 | Order state cache + payment audit logs |
-| **Traefik** | (ingress) | Ingress controller (port 8080) |
+| **Traefik** | Ingress Controller | Path and host-based routing (apps & Grafana) |
+| **ArgoCD** | GitOps Controller | Declarative continuous delivery, auto-sync, drift detection & self-healing |
+| **Sealed Secrets** | Bitnami Controller | GitOps-safe encrypted secrets decrypted only in-cluster |
+| **kube-prometheus-stack** | 93.3.0 | Prometheus Operator, node-exporter, kube-state-metrics, and Grafana |
 
 ---
 
-## 🚀 Quick Start (k3d)
+## 🔄 GitOps & CI/CD Workflow
+
+CloudMart is managed declaratively via GitOps and automated GitHub Actions workflows:
+
+```
+[ Developer Commit ] 
+       │
+       ▼ (push to main: services/**)
+[ GitHub Action: Build Images ]
+  ├── Build: frontend, order-service, payment-service, traffic-generator
+  └── Push: ghcr.io/chamesh2019/<service>:<sha> & :latest
+       │
+       ▼ (manual or release trigger)
+[ GitHub Action: Update Deployment Versions ]
+  ├── Validates image tags in GHCR via docker manifest inspect
+  └── Updates deploy/helm/k8s/values/<service>.yaml with new tag & commits to main
+       │
+       ▼ (polls or webhook)
+[ ArgoCD GitOps Engine ]
+  ├── App: cloudmart (deploy/helm/k8s) -> auto-sync + self-heal + prune
+  └── App: monitoring (kube-prometheus-stack) -> values from main branch
+```
+
+### GitOps Application Manifests
+- **CloudMart Platform**: `deploy/helm/argocd/cloudmart.yaml`
+  - Deploys the modular Helm chart to the `cloudmart` namespace.
+  - Features automated prune and self-healing.
+- **Observability Stack**: `deploy/helm/prometheus-stack/observability.yaml`
+  - Deploys `kube-prometheus-stack` into the `monitoring` namespace using multiple ArgoCD sources (upstream Helm chart + values committed in this repo).
+
+---
+
+## 🚀 Quick Start (k3d & ArgoCD)
 
 ### Prerequisites
 - [Docker](https://docs.docker.com/get-docker/)
 - [k3d](https://k3d.io/#installation)
 - [kubectl](https://kubernetes.io/docs/tasks/tools/)
 - [Helm](https://helm.sh/docs/intro/install/)
+- [kubeseal](https://github.com/bitnami-labs/sealed-secrets#installation) (for updating SealedSecrets)
 
 ### 1. Create k3d Cluster
 ```bash
-# Create a multi-node cluster with Traefik ingress on port 8080
+# Create cluster exposing ports 8080 (Ingress) and 8443
 k3d cluster create cloudmart \
   --agents 2 \
   --servers 1 \
   -p "8080:80@loadbalancer" \
-  -p "8443:443@loadbalancer" \
-  --k3s-arg "--disable=traefik@server:0"  # We'll install Traefik via Helm if needed
+  -p "8443:443@loadbalancer"
 ```
 
-> **Note**: The Helm chart expects Traefik as ingress class. Install Traefik if not present:
+### 2. Install Sealed Secrets Controller
 ```bash
-helm repo add traefik https://traefik.github.io/charts
+helm repo add sealed-secrets https://bitnami-labs.github.io/sealed-secrets
 helm repo update
-helm install traefik traefik/traefik --namespace kube-system
+helm install sealed-secrets-controller sealed-secrets/sealed-secrets -n kube-system
 ```
 
-### 2. Build Docker Images (load into k3d)
+### 3. Install ArgoCD
 ```bash
-# Build each service image
-docker build -t cloudmart/frontend:v1.0 ./services/frontend
-docker build -t cloudmart/order-service:v1.1 ./services/order-service
-docker build -t cloudmart/payment-service:v1.1 ./services/payment-service
+kubectl create namespace argocd
+kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
 
-# Import into k3d cluster
-k3d image import cloudmart/frontend:v1.0 cloudmart/order-service:v1.1 cloudmart/payment-service:v1.1 -c cloudmart
+# Wait for ArgoCD server ready
+kubectl wait --for=condition=available deployment/argocd-server -n argocd --timeout=300s
 ```
 
-### 3. Deploy with Helm
+### 4. Deploy Applications via ArgoCD
+Apply the ArgoCD application manifests to let GitOps take over:
+
 ```bash
-cd deploy/helm/k8s
-helm install cloudmart . --namespace cloudmart --create-namespace
+# Deploy CloudMart application
+kubectl apply -f deploy/helm/argocd/cloudmart.yaml
+
+# Deploy Monitoring Stack (Prometheus + Grafana)
+kubectl apply -f deploy/helm/prometheus-stack/observability.yaml
 ```
 
-### 4. Access the Application
-- **Frontend**: http://localhost:8080
-- **Order API**: http://localhost:8080/api/orders
-- **RabbitMQ Management**: `kubectl port-forward -n cloudmart svc/cloudmart-rabbitmq-service 15672:15672` → http://localhost:15672 (user: chames, pass: chames)
+*(Optional: manual local installation with Helm without ArgoCD)*:
+```bash
+helm install cloudmart ./deploy/helm/k8s \
+  -f deploy/helm/k8s/values/rabbitmq.yaml \
+  -f deploy/helm/k8s/values/redis.yaml \
+  -f deploy/helm/k8s/values/frontend.yaml \
+  -f deploy/helm/k8s/values/order-service.yaml \
+  -f deploy/helm/k8s/values/payment-service.yaml \
+  -f deploy/helm/k8s/values/traffic-generator.yaml \
+  -f deploy/helm/k8s/values/ingress.yaml \
+  --namespace cloudmart --create-namespace
+```
 
 ---
 
-## 🛠️ Development
+## 🌐 Access Endpoints
 
-### Project Structure
+| Service | URL / Access Method | Credentials |
+|---------|---------------------|-------------|
+| **Frontend UI** | [http://localhost:8080](http://localhost:8080) | — |
+| **Order API** | [http://localhost:8080/api/orders](http://localhost:8080/api/orders) | — |
+| **Grafana** | Add `127.0.0.1 grafana.localhost` to `/etc/hosts` → [http://grafana.localhost:8080](http://grafana.localhost:8080) *(or port-forward `svc/prometheus-grafana -n monitoring 3000:80`)* | `admin` / `admin` |
+| **ArgoCD UI** | `kubectl port-forward -n argocd svc/argocd-server 8443:443` → [https://localhost:8443](https://localhost:8443) | `admin` / retrieve initial password: `kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" \| base64 -d` |
+| **RabbitMQ Management** | `kubectl port-forward -n cloudmart svc/cloudmart-rabbitmq-service 15672:15672` → [http://localhost:15672](http://localhost:15672) | Decrypted via SealedSecret (`chames` / `chames`) |
+| **Traffic Generator API** | `kubectl port-forward -n cloudmart svc/cloudmart-traffic-generator-service 8082:8082` → [http://localhost:8082/metrics](http://localhost:8082/metrics) | — |
+
+---
+
+## 🛠️ Project Structure
+
 ```
 k8s-microservices/
-├── AGENT.md                    # Agent rules (read-only workspace)
-├── README.md                   # This file
+├── AGENT.md                                # Agent operation guidelines
+├── README.md                               # Project documentation
+├── cloudmart_architecture.png              # Architecture diagram
+├── .github/
+│   └── workflows/
+│       ├── deploy-to-ghcr.yaml             # Builds & pushes service containers to GHCR
+│       └── update-manifests.yaml           # Validates tags & updates Helm values in Git
 ├── deploy/
 │   └── helm/
-│       └── k8s/                # Helm chart
+│       ├── argocd/
+│       │   └── cloudmart.yaml              # ArgoCD Application for CloudMart platform
+│       ├── prometheus-stack/
+│       │   ├── observability.yaml          # ArgoCD Application for kube-prometheus-stack
+│       │   └── monitoring-values.yaml      # Custom Prometheus & Grafana values
+│       └── k8s/                            # Modular Helm chart
 │           ├── Chart.yaml
-│           ├── values.yaml
+│           ├── values/                     # Split values per service
+│           │   ├── frontend.yaml
+│           │   ├── order-service.yaml
+│           │   ├── payment-service.yaml
+│           │   ├── traffic-generator.yaml
+│           │   ├── rabbitmq.yaml
+│           │   ├── redis.yaml
+│           │   └── ingress.yaml
 │           └── templates/
 │               ├── ingress.yaml
 │               ├── frontend-deployment.yaml
@@ -133,105 +219,57 @@ k8s-microservices/
 │               ├── order-service.yaml
 │               ├── payment-deployment.yaml
 │               ├── payment-service.yaml
+│               ├── traffic-generator-deployment.yaml
+│               ├── traffic-generator-service.yaml
 │               ├── rabbitmq-deployment.yaml
 │               ├── rabbitmq-service.yaml
-│               ├── rabbitmq-secrets.yaml
+│               ├── rabbitmq-sealed-secrets.yaml # Encrypted Bitnami SealedSecret
 │               ├── redis-deployment.yaml
 │               └── redis-service.yaml
 └── services/
-    ├── frontend/               # Nginx static site
+    ├── frontend/                           # Nginx static site
     │   ├── Dockerfile
     │   ├── nginx.conf
     │   └── src/
-    │       ├── index.html
-    │       ├── style.css
-    │       └── app.js
-    ├── order-service/          # Express.js API
+    ├── order-service/                      # Express.js order processing API
     │   ├── Dockerfile
     │   ├── package.json
     │   └── server.js
-    └── payment-service/        # Express.js Consumer
+    ├── payment-service/                    # Express.js async payment consumer
+    │   ├── Dockerfile
+    │   ├── package.json
+    │   └── server.js
+    └── traffic-generator/                  # Synthetic load generator & prom metrics
         ├── Dockerfile
         ├── package.json
         └── server.js
 ```
 
-### Local Development (without k3d)
-```bash
-# Start infrastructure
-docker-compose up -d redis rabbitmq
-
-# Run services locally
-cd services/order-service && npm install && npm start
-cd services/payment-service && npm install && npm start
-cd services/frontend && python3 -m http.server 8080  # or use nginx
-```
-
 ---
 
-## 🔍 Key Learning Concepts Demonstrated
+## 🔍 Production Patterns & Concepts Demonstrated
 
-### Kubernetes Patterns
-- **Helm templating** with values.yaml for environment configuration
-- **Secrets management** (RabbitMQ credentials via Kubernetes secrets)
-- **Health probes** (liveness/readiness) on all services
-- **Resource quotas** (CPU/memory requests & limits)
-- **Ingress routing** with path-based rules (Traefik)
+### 1. GitOps & Declarative Delivery
+- **ArgoCD as Single Source of Truth**: All manifests, configurations, and Helm values are synchronized directly from GitHub.
+- **Self-Healing & Drift Detection**: Manual `kubectl edit` changes are automatically reconciled and restored to the state declared in Git.
+- **Multi-Source ArgoCD Applications**: Demonstrates consuming official third-party Helm charts alongside repository-managed `values.yaml` files.
 
-### Microservice Patterns
-- **Event-driven choreography** (no central orchestrator)
-- **Async request-reply** via message broker (202 Accepted → poll for status)
-- **Dead Letter Queue** for poison message handling
-- **Idempotent consumers** (payment service acknowledges only after processing)
-- **Distributed tracing headers** (W3C trace-context ready)
+### 2. Secrets Management with Sealed Secrets
+- **GitOps-Safe**: RabbitMQ authentication credentials are encrypted using Bitnami's `kubeseal` utility into `SealedSecret` resources that can safely live in public source control.
+- **In-Cluster Decryption**: The cluster-side Sealed Secrets controller decrypts the payload into a native Kubernetes `Secret` at runtime.
 
-### Observability Ready
-- Structured JSON logging
-- Health endpoints with dependency checks
-- Correlation IDs in events (`eventId`, `orderId`)
-- RabbitMQ management UI for queue monitoring
+### 3. Reliability & Pod Hardening
+- **Zero-Downtime Rolling Updates**: Configured with `strategy: RollingUpdate`, `maxUnavailable: 0`, and `maxSurge: 2` across application deployments.
+- **Comprehensive Probes**: Liveness and readiness HTTP probes on all microservices prevent broken containers from serving live traffic.
+- **Resource Constraints**: CPU and memory requests & limits strictly defined for all workloads to prevent noisy-neighbor starvation.
 
----
+### 4. Microservices & Event Choreography
+- **Decoupled Architecture**: Services interact asynchronously through RabbitMQ topics without a centralized orchestration engine.
+- **Resilience**: RabbitMQ Dead Letter Exchange (DLX) configured to isolate and retain failed payment messages without blocking queues.
 
-## 📚 Helm Chart Details
-
-### Configuration (`values.yaml`)
-
-```yaml
-# Key customization points:
-frontend:
-  replicaCount: 1
-  image: { repository, tag, pullPolicy }
-  resources: { limits, requests }
-
-orderService:
-  replicaCount: 1
-  image: { repository, tag, pullPolicy }
-  resources: { limits, requests }
-
-paymentService:
-  replicaCount: 1
-  image: { repository, tag, pullPolicy }
-  resources: { limits, requests }
-
-rabbitmq:
-  auth: { username, password, erlangCookie }
-  persistence: { enabled: false }
-
-redis:
-  persistence: { enabled: false }
-
-ingress:
-  enabled: true
-  className: traefik
-  paths: [...]
-```
-
-### Template Functions Used
-- `.Release.Name` — Unique release prefix for all resources
-- `.Values.<service>.image` — Configurable image/tag/pullPolicy
-- `valueFrom.secretKeyRef` — Inject RabbitMQ credentials from secret
-- Range iteration over `.Values.ingress.paths`
+### 5. Observability & Synthetic Traffic
+- **Synthetic User Journeys**: `traffic-generator` simulates active user browsing, checkout, and order status polling with tunable load.
+- **Instrumentation**: Prometheus metrics collection via `prom-client` tracking latency histograms, request counters, and active session gauges labeled by scenario.
 
 ---
 
@@ -249,38 +287,30 @@ Response: `202 Accepted` with `orderId` and `status: PENDING`
 ```bash
 curl http://localhost:8080/api/orders/<orderId>
 ```
-Watch status transition: `PENDING` → `CONFIRMED` (or `FAILED`)
+Status transitions asynchronously: `PENDING` → `CONFIRMED` (or `FAILED`)
 
-### 3. Monitor via RabbitMQ UI
-- Queue: `orders.process-payment` — messages consumed by payment-service
-- Queue: `orders.order-status-update` — payment events consumed by order-service
-- DLQ: `cloudmart.dlq` — failed messages after retries exhausted
+### 3. Tune Synthetic Traffic Generator
+```bash
+# Adjust synthetic traffic dynamically (e.g., 5 requests per second)
+curl -X POST http://localhost:8082/config \
+  -H "Content-Type: application/json" \
+  -d '{"requestsPerSecond": 5, "checkoutRatio": 0.2}'
+```
 
 ---
 
 ## 🧹 Cleanup
 ```bash
-helm uninstall cloudmart -n cloudmart
-kubectl delete namespace cloudmart
+# If using ArgoCD
+kubectl delete -f deploy/helm/argocd/cloudmart.yaml
+kubectl delete -f deploy/helm/prometheus-stack/observability.yaml
+
+# Delete k3d cluster
 k3d cluster delete cloudmart
 ```
-
----
-
-## 📖 Learning Resources Referenced
-
-- [k3d Documentation](https://k3d.io/)
-- [Helm Chart Best Practices](https://helm.sh/docs/chart_best_practices/)
-- [RabbitMQ AMQP 0-9-1 Model](https://www.rabbitmq.com/tutorials/amqp-concepts.html)
-- [Kubernetes Probe Patterns](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/)
-- [Event-Driven Architecture](https://microservices.io/patterns/data/event-driven-architecture.html)
 
 ---
 
 ## 📄 License
 
 This project is for **educational/learning purposes only**. No warranty provided.
-
----
-
-*Built with ❤️ for learning Kubernetes, microservices, and cloud-native patterns on k3d.*
