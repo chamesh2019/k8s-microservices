@@ -1,7 +1,7 @@
 frontend:
   replicaCount: 1
   image:
-    repository: ghcr.io/chamesh2019/k8s-microservices/frontend
+    repository: ghcr.io/chamesh2019/frontend
     tag: v1.0.0
     pullPolicy: IfNotPresent
   service:

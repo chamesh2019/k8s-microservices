@@ -32,9 +32,9 @@ spec:
           imagePullPolicy: {{ .Values.trafficGenerator.image.pullPolicy }}
           env:
             - name: FRONTEND_URL
-              value: "{{ .Values.trafficGenerator.frontendUrl }}"
+              value: "http://{{ .Release.Name }}-frontend:{{ .Values.frontend.service.port }}"
             - name: ORDER_SERVICE_URL
-              value: "{{ .Values.trafficGenerator.orderServiceUrl }}"
+              value: "http://{{ .Release.Name }}-order-service:{{ .Values.orderService.service.port }}"
             - name: REQUESTS_PER_SECOND
               value: "{{ .Values.trafficGenerator.requestsPerSecond }}"
             - name: FRONTEND_PAGE_LOAD_RATIO

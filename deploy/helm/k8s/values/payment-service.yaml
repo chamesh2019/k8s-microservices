@@ -1,7 +1,7 @@
 paymentService:
   replicaCount: 1
   image:
-    repository: ghcr.io/chamesh2019/k8s-microservices/payment-service
+    repository: ghcr.io/chamesh2019/payment-service
     tag: v1.0.0
     pullPolicy: IfNotPresent
   service:

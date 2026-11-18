@@ -9,8 +9,6 @@ trafficGenerator:
     type: ClusterIP
     port: 8082
   requestsPerSecond: "1"
-  frontendUrl: "http://{{ .Release.Name }}-frontend:80"
-  orderServiceUrl: "http://{{ .Release.Name }}-order-service:{{ .Values.orderService.service.port }}"
   ratios:
     pageLoad: "0.3"
     checkout: "0.1"
