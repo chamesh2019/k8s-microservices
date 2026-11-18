@@ -2,7 +2,7 @@ paymentService:
   replicaCount: 1
   image:
     repository: ghcr.io/chamesh2019/payment-service
-    tag: v1.0.0
+    tag: 358cb339d592c5d3a632bf0b237381a33dd590c1
     pullPolicy: IfNotPresent
   service:
     type: ClusterIP
